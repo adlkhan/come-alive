@@ -1,41 +1,95 @@
-import React, { useState, useEffect } from 'react';
-import { render, Text, Box } from 'ink';
+import React, { useState } from 'react';
+import { render, Box, Text, useApp } from 'ink';
+import TextInput from 'ink-text-input';
+import { useGemini } from './useGemini.js';
+
+type Message = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 const App = () => {
-  const [status, setStatus] = useState('Initializing');
-  const [ticks, setTicks] = useState(0);
+  const { exit } = useApp();
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
 
-  // Simple timer to prove the Event Loop is working
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTicks(t => t + 1);
-      setStatus(prev => prev === 'Thinking...' ? 'Initializing' : 'Thinking...');
-    }, 1000);
+  const { sendPrompt, isStreaming } = useGemini();
 
-    return () => clearInterval(timer);
-  }, []);
+  const handleSubmit = () => {
+    if (!input.trim()) return;
+
+    if (input === 'exit') {
+      exit();
+      return;
+    }
+
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: input,
+    }
+
+    const aiMsgId = (Date.now() + 1).toString();
+    const initialAiMsg: Message = {
+      id: aiMsgId,
+      role: 'assistant',
+      content: '',
+    }
+
+    setMessages(prev => [...prev, userMsg, initialAiMsg]);
+
+    setInput('');
+
+    sendPrompt(input, (newText) => {
+      setMessages(prev => {
+        return prev.map(msg => {
+          if (msg.id === aiMsgId) {
+            return { ...msg, content: msg.content + newText };
+          }
+          return msg;
+        })
+      })
+    });
+  }
 
   return (
-    <Box flexDirection="column" padding={1} borderStyle="round" borderColor="green">
-      <Text color="cyan" bold>
-        COME ALIVE (v0.1)
-      </Text>
-
-      <Box marginTop={1}>
-        <Text>System Status: </Text>
-        <Text color="yellow">{status}</Text>
+    <Box flexDirection="column" height={process.stdout.rows}>
+      {/* Header */}
+      <Box borderStyle="round" borderColor="green" paddingX={1}>
+        <Text bold color="green">COME ALIVE (v0.3)</Text>
+        {isStreaming && <Text color="yellow">  (Thinking...)</Text>}
       </Box>
 
-      <Box marginTop={1}>
-        <Text dimColor>Uptime: {ticks}s</Text>
+      {/* Message History (The Chat Window) */}
+      <Box flexDirection="column" flexGrow={1} paddingY={1}>
+        {messages.map(msg => (
+          <Box key={msg.id} flexDirection="row" marginBottom={1}>
+            <Text bold color={msg.role === 'user' ? 'blue' : 'magenta'}>
+              {msg.role === 'user' ? 'You: ' : 'AI: '}
+            </Text>
+            <Text>{msg.content}</Text>
+          </Box>
+        ))}
       </Box>
 
-      <Box marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
-        <Text>Waiting for user input...</Text>
+      {/* Input Area (The Footer) */}
+      <Box borderStyle="single" borderColor={isStreaming ? 'yellow' : 'gray'}>
+        <Text color="green">❯ </Text>
+
+        {isStreaming ? (
+          <Text dimColor>Wait for AI...</Text>
+        ) : (
+          <TextInput
+            value={input}
+            onChange={setInput}
+            onSubmit={handleSubmit}
+            placeholder="Type a message..."
+          />
+        )}
       </Box>
-    </Box>
+    </Box >
   );
-};
+}
 
-// Start the UI
 render(<App />);

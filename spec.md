@@ -7,7 +7,7 @@
 
 ## 2. The Tech Stack
 * **Language:** TypeScript (Node.js LTS) - *Standard for backend tooling.*
-* **AI Provider:** Google Gemini API (Gemini 1.5 Flash/Pro) - *Chosen for Free Tier availability & Function Calling support.*
+* **AI Provider:** Google Gemini API (Gemini 2.0 Flash / `@google/genai` SDK) - *Updated to modern SDK for Function Calling & Streaming.*
 * **Interface:** `Ink` (React for CLI) - *For rendering dynamic, interactive terminal UIs.*
 * **Protocol:** Model Context Protocol (MCP) - *Standard for connecting AI to tools.*
 * **Runtime/Security:** Docker - *CRITICAL. No code runs on the host OS. All execution happens in an isolated container.*
@@ -33,11 +33,17 @@ The system consists of two distinct parts:
     * **Network:** Initially restricted (allow-list only).
 
 ## 4. Implementation Roadmap
-* **Phase 1: The Brain (Current).** * Verify Gemini API connection. 
-    * Verify "Function Calling" (The AI's ability to ask for tools).
-* **Phase 2: The UI.** * Set up `Ink` to create a streaming chat interface in the terminal.
-* **Phase 3: The Docker Bridge.** * Create a tool that spins up a persistent Docker container.
-* **Phase 4: The Execution Tool.** * Create an MCP tool `execute_command` that passes a string to the Docker container and returns `stdout`.
+* **Phase 1: The Brain (Completed 2026-02-03).**
+    * Verified Gemini API connection using `@google/genai`.
+    * Verified "Function Calling" (The AI's ability to ask for tools).
+* **Phase 2: The UI (Completed 2026-02-03).**
+    * Set up `Ink` to create a streaming chat interface in the terminal.
+    * Implemented `useGemini` hook for streaming text state management.
+    * Solved layout clipping using `process.stdout.rows`.
+* **Phase 3: The Docker Bridge (Next).**
+    * Create a tool that spins up a persistent Docker container.
+* **Phase 4: The Execution Tool.**
+    * Create an MCP tool `execute_command` that passes a string to the Docker container and returns `stdout`.
 * **Phase 5: The Safety Layer.**
     * Implement the "Human-in-the-Loop" confirmation prompt before execution.
 
@@ -52,3 +58,9 @@ The system consists of two distinct parts:
     * **Tier 2 (Standard):** Explain briefly, then implement.
     * **Tier 3 (Boilerplate):** Just implement.
 4.  **Context Awareness:** I am a recent graduate with limited resources. Do not suggest paid enterprise tools. Prioritize "Employability Signals" (Docker, Testing, CI/CD) over "Flashy Features."
+
+## 6. Known Issues / Tech Debt
+* **UI Flicker:** Ink repaints cause flickering during high-speed token streaming.
+* **Scroll overflow:** Long conversations push content behind the pinned input footer.
+* **Input Blocking:** User cannot type while AI is thinking (Temporary fix: Input is hidden).
+
