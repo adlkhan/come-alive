@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Content, GoogleGenAI, Part } from '@google/genai';
+import { Content, GoogleGenAI } from '@google/genai';
 import { TOOLS } from './tools/definitions.js';
 import { ensureSandboxActive } from './sandbox/lifecycle.js';
 import { executeCommand } from './sandbox/execute.js';
@@ -12,17 +12,19 @@ export const useGemini = () => {
 
   const sandboxPromise = ensureSandboxActive();
 
-  const sendPrompt = async (
-    history: Content[],
+  async function sendPrompt(
+    conversation: Content[],
     onChunk: (text: string) => void
-  ) => {
+  ) {
+
     setIsStreaming(true);
+
     try {
       const container = await sandboxPromise;
 
       const response = await ai.models.generateContentStream({
         model: 'gemini-2.5-flash',
-        contents: history,
+        contents: conversation,
         config: {
           tools: TOOLS
         }
@@ -38,20 +40,20 @@ export const useGemini = () => {
           for (const call of functionsCalls) {
             if (call.name === 'execute_command') {
               const cmd = call.args.command as string;
-              onChunk(`\n\n> ⚙️ Executing: ${cmd}...\n`);
+              onChunk(`\n\n> Executing: ${cmd}\n`);
 
               try {
                 const output = await executeCommand(container, cmd);
-                onChunk(`\n> ✅ Output:\n${output}\n\n`);
+                onChunk(`\n> Output:\n${output}\n\n`);
               } catch (err: any) {
-                onChunk(`\n> ❌ Error: ${err.message}\n`);
+                onChunk(`\n> Error: ${err.message}\n`);
               }
             }
           }
         }
       }
     } catch (error) {
-      onChunk(`\n[System Error]: ${error}`);
+      throw error;
     } finally {
       setIsStreaming(false);
     }

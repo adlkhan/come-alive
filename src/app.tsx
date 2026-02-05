@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { render, Box, Text, useApp } from 'ink';
 import TextInput from 'ink-text-input';
 import { useGemini } from './useGemini.js';
 
+// Following partially follows the Content type from Gemini's API 
 type Message = {
   id: string;
   role: 'user' | 'model';
@@ -12,7 +13,7 @@ type Message = {
 const App = () => {
   const { exit } = useApp();
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [conversation, setConversation] = useState<Message[]>([]);
   const { sendPrompt, isStreaming } = useGemini();
 
   const handleSubmit = () => {
@@ -29,26 +30,31 @@ const App = () => {
       parts: [{ text: input }]
     }
 
-    const aiMsgId = (Date.now() + 1).toString();
-    const initialAiMsg: Message = {
-      id: aiMsgId,
+    // Prepare empty AI message
+    // This will be populated as the AI replies
+    // It will also include all the errors reported by the proceeses running in the container so the AI knows how to fix them
+    const aiMsg: Message = {
+      id: (Date.now() + 1).toString(),
       role: 'model',
       parts: [{ text: '' }]
     }
 
-    const newHistory = [...messages, userMsg, initialAiMsg];
-    setMessages([...newHistory])
+    const updatedConversation = [...conversation, userMsg, aiMsg];
+
+    setConversation(updatedConversation);
     setInput('');
 
-    const apiHistory = newHistory.map(msg => ({
+    // Send conversation to AI but strip IDs because they are only necessary for React
+
+    const conversationForAI = updatedConversation.map(msg => ({
       role: msg.role,
       parts: msg.parts
     }));
 
-    sendPrompt(apiHistory, (newText) => {
-      setMessages(prev => {
+    sendPrompt(conversationForAI, (newText) => {
+      setConversation(prev => {
         return prev.map(msg => {
-          if (msg.id === aiMsgId) {
+          if (msg.id === aiMsg.id) {
             return {
               ...msg,
               parts: [{ text: msg.parts[0].text + newText }]
@@ -56,21 +62,21 @@ const App = () => {
           }
           return msg;
         })
-      })
+      });
     });
   }
 
   return (
-    <Box flexDirection="column" height={process.stdout.rows || 20}>
+    <Box flexDirection="column">
       {/* --- HEADER --- */}
       <Box borderStyle="round" borderColor="green" paddingX={1}>
-        <Text bold color="green">COME ALIVE (v0.4)</Text>
+        <Text bold color="green">COME ALIVE</Text>
         {isStreaming && <Text color="yellow"> (Thinking...)</Text>}
       </Box>
 
       {/* --- CHAT HISTORY --- */}
       <Box flexDirection="column" flexGrow={1} paddingY={1}>
-        {messages.map((msg) => (
+        {conversation.map((msg) => (
           <Box key={msg.id} flexDirection="row" marginBottom={1}>
             <Text bold color={msg.role === 'user' ? 'blue' : 'magenta'}>
               {msg.role === 'user' ? 'You: ' : 'AI:  '}
