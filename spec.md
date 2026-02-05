@@ -1,66 +1,59 @@
 # Project Spec: Come Alive
-
 ## 1. Executive Summary
-**Goal:** Build a secure, terminal-based AI agent capable of executing complex engineering tasks (coding, testing, debugging) autonomously but safely.
-**Philosophy:** "The Warden Model." The AI is a powerful engine, but the System is the steering wheel and brakes.
-**Target Audience:** Myself (for learning) and future employers (to demonstrate AI Infrastructure & Security skills).
+**Goal:** Build a secure, terminal-based AI agent capable of executing complex engineering tasks (coding, testing, debugging) autonomously via a recursive "ReAct" loop.
+**Philosophy:** "The Warden Model." The AI is the engine, the Sandbox (container) is the cell, and the Node.js App is the Warden controlling the flow.
+**Target Audience:** Myself (for learning) and future employers (to demonstrate AI Infrastructure, Security & Docker skills).
 
 ## 2. The Tech Stack
-* **Language:** TypeScript (Node.js LTS) - *Standard for backend tooling.*
-* **AI Provider:** Google Gemini API (Gemini 2.0 Flash / `@google/genai` SDK) - *Updated to modern SDK for Function Calling & Streaming.*
-* **Interface:** `Ink` (React for CLI) - *For rendering dynamic, interactive terminal UIs.*
-* **Protocol:** Model Context Protocol (MCP) - *Standard for connecting AI to tools.*
-* **Runtime/Security:** Docker - *CRITICAL. No code runs on the host OS. All execution happens in an isolated container.*
+* **Language:** TypeScript (Node.js LTS, ESM Modules)
+* **AI Provider:** Google Gemini API (Gemini 2.5 Flash)
+* **Interface:** `Ink` (React for CLI)
+* **Container Runtime:** Docker (via `dockerode`) - *Manages the isolated "Prison Cell".*
 
-## 3. Architecture: "The Warden"
-The system consists of two distinct parts:
+## 3. Architecture
+### A. The Warden (Host Application)
+- Uses a Recursive ReAct Loop i.e. lets the AI execute tasks in the container recursively by feeding the output from the container.
+- Keeps track of the context so the AI knows about what has already happened.
+- Everything is controlled by the Warden and hence the name. Warden ensures that AI only has access to the sandbox that the Warden creates.
 
-### A. The Client (The Warden) - *Runs on Host Machine*
-* **Responsibility:**
-    * Accepts user prompts via the `Ink` UI.
-    * Manages the conversation history with Gemini.
-    * **The Gatekeeper:** Intercepts every tool request from the AI.
-    * **The UI:** Displays the "Allow/Deny" prompt to the human user for critical actions.
-    * Communicates with the Docker Daemon.
-
-### B. The Sandbox (The Prisoner) - *Runs inside Docker*
-* **Responsibility:**
-    * Executes the actual shell commands (e.g., `npm install`, `ls -la`).
-    * Edits files.
-    * Runs tests.
-* **Constraints:**
-    * **Volume:** Can only see the specific project folder mounted to it.
-    * **Network:** Initially restricted (allow-list only).
+### B. The Sandbox
+The container in which AI wil perform the required tasks of the user or programmer.
 
 ## 4. Implementation Roadmap
-* **Phase 1: The Brain (Completed 2026-02-03).**
-    * Verified Gemini API connection using `@google/genai`.
-    * Verified "Function Calling" (The AI's ability to ask for tools).
-* **Phase 2: The UI (Completed 2026-02-03).**
-    * Set up `Ink` to create a streaming chat interface in the terminal.
-    * Implemented `useGemini` hook for streaming text state management.
-    * Solved layout clipping using `process.stdout.rows`.
-* **Phase 3: The Docker Bridge (Next).**
-    * Create a tool that spins up a persistent Docker container.
-* **Phase 4: The Execution Tool.**
-    * Create an MCP tool `execute_command` that passes a string to the Docker container and returns `stdout`.
-* **Phase 5: The Safety Layer.**
-    * Implement the "Human-in-the-Loop" confirmation prompt before execution.
+* **Phase 1: The Brain (AI) (Completed).**
+* Verified Gemini API connection using `@google/genai`.
+
+* **Phase 2: The UI (Completed).**
+* Set up `Ink` streaming interface and `useGemini` hook.
+
+* **Phase 3: The Docker Bridge (Completed).**
+* Implemented `lifecycle.ts` to manage the persistent `node:20-alpine` container.
+
+* **Phase 4: The Execution Tool (Completed).**
+* Implemented `execute.ts` with TTY/Hijack support.
+* Created `execute_command` schema in `definitions.ts`.
+
+* **Phase 5: The Agentic Loop (In Progress).**
+* **Goal:** Refactor `useGemini.ts` to handle recursion.
+* **Goal:** Enable the AI to "hear" the output of its own tools and react to them (Self-Correction).
+
+* **Phase 6: The Safety Layer (Future).**
+* Implement "Human-in-the-Loop" interception.
+* The Warden must prompt the user (Allow/Deny) before executing dangerous commands (e.g., `rm -rf`, network calls).
 
 ## 5. Instructions for LLM (The Persona)
-**Role:** You are a Senior Staff Engineer and Mentor.
-**Tone:** Critical, direct, and efficient. Do not worry about hurting my feelings. If an idea is bad or a security risk, state it bluntly.
+**Role:** Senior Staff Engineer / Mentor.
+**Tone:** Critical, direct, efficient.
 **Primary Directive:**
-1.  **No "Eyes Closed" Coding:** Never provide code without explaining the "why."
-2.  **Security First:** Always prioritize the "Warden" architecture. If I suggest a shortcut that bypasses Docker, reject it.
-3.  **The Learning Filter:**
-    * **Tier 1 (Critical):** Force me to explain complex logic before giving the code.
-    * **Tier 2 (Standard):** Explain briefly, then implement.
-    * **Tier 3 (Boilerplate):** Just implement.
-4.  **Context Awareness:** I am a recent graduate with limited resources. Do not suggest paid enterprise tools. Prioritize "Employability Signals" (Docker, Testing, CI/CD) over "Flashy Features."
+
+1. **No "Eyes Closed" Coding:** Explain the "why" before the "how."
+2. **Security First:** Strict adherence to the Docker Sandbox model.
+3. **The Learning Filter:**
+* **Tier 1 (Critical):** Force explanation of complex logic (e.g., Async Iterators, Docker Streams).
+* **Tier 2 (Standard):** Brief explanation, then code.
+* **Tier 3 (Boilerplate):** Just implement.
 
 ## 6. Known Issues / Tech Debt
 * **UI Flicker:** Ink repaints cause flickering during high-speed token streaming.
-* **Scroll overflow:** Long conversations push content behind the pinned input footer.
-* **Input Blocking:** User cannot type while AI is thinking (Temporary fix: Input is hidden).
+* **State Amnesia:** If the Node.js host app restarts, the *Chat History* is lost, even though the *Docker Container* preserves the files. The AI loses context of what it just did.
 
