@@ -5,15 +5,14 @@ import { useGemini } from './useGemini.js';
 
 type Message = {
   id: string;
-  role: 'user' | 'assistant';
-  content: string;
+  role: 'user' | 'model';
+  parts: { text: string }[]
 }
 
 const App = () => {
   const { exit } = useApp();
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
-
   const { sendPrompt, isStreaming } = useGemini();
 
   const handleSubmit = () => {
@@ -27,25 +26,33 @@ const App = () => {
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input,
+      parts: [{ text: input }]
     }
 
     const aiMsgId = (Date.now() + 1).toString();
     const initialAiMsg: Message = {
       id: aiMsgId,
-      role: 'assistant',
-      content: '',
+      role: 'model',
+      parts: [{ text: '' }]
     }
 
-    setMessages(prev => [...prev, userMsg, initialAiMsg]);
-
+    const newHistory = [...messages, userMsg, initialAiMsg];
+    setMessages([...newHistory])
     setInput('');
 
-    sendPrompt(input, (newText) => {
+    const apiHistory = newHistory.map(msg => ({
+      role: msg.role,
+      parts: msg.parts
+    }));
+
+    sendPrompt(apiHistory, (newText) => {
       setMessages(prev => {
         return prev.map(msg => {
           if (msg.id === aiMsgId) {
-            return { ...msg, content: msg.content + newText };
+            return {
+              ...msg,
+              parts: [{ text: msg.parts[0].text + newText }]
+            };
           }
           return msg;
         })
@@ -54,42 +61,42 @@ const App = () => {
   }
 
   return (
-    <Box flexDirection="column" height={process.stdout.rows}>
-      {/* Header */}
+    <Box flexDirection="column" height={process.stdout.rows || 20}>
+      {/* --- HEADER --- */}
       <Box borderStyle="round" borderColor="green" paddingX={1}>
-        <Text bold color="green">COME ALIVE (v0.3)</Text>
-        {isStreaming && <Text color="yellow">  (Thinking...)</Text>}
+        <Text bold color="green">COME ALIVE (v0.4)</Text>
+        {isStreaming && <Text color="yellow"> (Thinking...)</Text>}
       </Box>
 
-      {/* Message History (The Chat Window) */}
+      {/* --- CHAT HISTORY --- */}
       <Box flexDirection="column" flexGrow={1} paddingY={1}>
-        {messages.map(msg => (
+        {messages.map((msg) => (
           <Box key={msg.id} flexDirection="row" marginBottom={1}>
             <Text bold color={msg.role === 'user' ? 'blue' : 'magenta'}>
-              {msg.role === 'user' ? 'You: ' : 'AI: '}
+              {msg.role === 'user' ? 'You: ' : 'AI:  '}
             </Text>
-            <Text>{msg.content}</Text>
+            {/* We preserve newlines so code blocks render correctly */}
+            <Text>{msg.parts[0].text}</Text>
           </Box>
         ))}
       </Box>
 
-      {/* Input Area (The Footer) */}
+      {/* --- INPUT FOOTER --- */}
       <Box borderStyle="single" borderColor={isStreaming ? 'yellow' : 'gray'}>
         <Text color="green">❯ </Text>
-
         {isStreaming ? (
-          <Text dimColor>Wait for AI...</Text>
+          <Text dimColor>Wait for AI to finish...</Text>
         ) : (
           <TextInput
             value={input}
             onChange={setInput}
             onSubmit={handleSubmit}
-            placeholder="Type a message..."
+            placeholder="Type 'List files' to test the hands..."
           />
         )}
       </Box>
-    </Box >
+    </Box>
   );
-}
+};
 
 render(<App />);
