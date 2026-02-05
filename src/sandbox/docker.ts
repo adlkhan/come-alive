@@ -1,3 +1,8 @@
+/**
+ * Verifies whether Docker is functional
+ *
+*/
+
 import Docker from 'dockerode';
 
 const docker = new Docker();

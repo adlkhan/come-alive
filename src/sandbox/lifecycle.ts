@@ -1,3 +1,8 @@
+/*
+ * Sets up a Docker container for the AI. 
+ * Returns the existing container if already created
+ */
+
 import Docker from 'dockerode';
 
 const docker = new Docker();

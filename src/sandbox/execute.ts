@@ -1,3 +1,7 @@
+/**
+ * Executes command in docker and reports its output.
+*/
+
 import Docker from 'dockerode';
 
 /**
