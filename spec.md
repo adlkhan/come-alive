@@ -54,6 +54,7 @@ The container in which AI wil perform the required tasks of the user or programm
 * **Tier 3 (Boilerplate):** Just implement.
 
 ## 6. Known Issues / Tech Debt
-* **UI Flicker:** Ink repaints cause flickering during high-speed token streaming.
+* **UI Flicker:** Ink repaints cause flickering
 * **State Amnesia:** If the Node.js host app restarts, the *Chat History* is lost, even though the *Docker Container* preserves the files. The AI loses context of what it just did.
+* During fast typing, some of the characters get overwritten, probably race condition input state while typing
 

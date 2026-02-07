@@ -15,6 +15,6 @@ import { executeCommand } from './sandbox/execute.js';
   console.log("Root Directory Content:\n", fileList);
 
   // Cleanup (Optional - usually we keep it running, but for test we kill it)
-  // await killSandbox();
+  await killSandbox();
 
 })();

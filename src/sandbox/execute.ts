@@ -21,8 +21,6 @@ const collectOutput = (stream: NodeJS.ReadableStream): Promise<string> => {
 }
 
 export const executeCommand = async (container: Docker.Container, cmd: string) => {
-  console.log(`🚀 Executing: "${cmd}"`);
-
   const exec = await container.exec({
     Cmd: ['sh', '-c', cmd],
     AttachStdout: true,

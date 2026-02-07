@@ -1,94 +1,190 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { render, Box, Text, useApp } from 'ink';
 import TextInput from 'ink-text-input';
-import { useGemini } from './useGemini.js';
+import { useGemini, GeminiEvent } from './useGemini.js';
+import { Content } from '@google/genai';
 
-// Following partially follows the Content type from Gemini's API 
-type Message = {
+// --- Types for UI State ---
+
+type ToolLog = {
+  command: string;
+  output: string | null; // null means "Running..."
+}
+
+type UIContentPart =
+  | { type: 'text', content: string }
+  | { type: 'tool', log: ToolLog }
+
+type UIMessage = {
   id: string;
   role: 'user' | 'model';
-  parts: { text: string }[]
+  parts: UIContentPart[];
 }
 
 const App = () => {
   const { exit } = useApp();
   const [input, setInput] = useState('');
-  const [conversation, setConversation] = useState<Message[]>([]);
+
+  // UI State: This is what YOU see (Text + Tool Boxes)
+  const [conversation, setConversation] = useState<UIMessage[]>([]);
+
+  // AI Memory: This is the strict format the AI needs (JSON)
+  // We use a Ref because we don't need re-renders when this changes, 
+  // only when we call sendPrompt.
+  const geminiHistory = useRef<Content[]>([]);
+
   const { sendPrompt, isStreaming } = useGemini();
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!input.trim()) return;
-
     if (input === 'exit') {
       exit();
       return;
     }
 
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      parts: [{ text: input }]
-    }
-
-    // Prepare empty AI message
-    // This will be populated as the AI replies
-    // It will also include all the errors reported by the proceeses running in the container so the AI knows how to fix them
-    const aiMsg: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'model',
-      parts: [{ text: '' }]
-    }
-
-    const updatedConversation = [...conversation, userMsg, aiMsg];
-
-    setConversation(updatedConversation);
+    const userText = input;
     setInput('');
 
-    // Send conversation to AI but strip IDs because they are only necessary for React
+    // 1. Add User Message to UI
+    const userMsg: UIMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      parts: [{ type: 'text', content: userText }]
+    };
 
-    const conversationForAI = updatedConversation.map(msg => ({
-      role: msg.role,
-      parts: msg.parts
-    }));
+    // 2. Prepare Placeholder AI Message (We will fill this incrementally)
+    const aiMsgId = (Date.now() + 1).toString();
+    const aiMsg: UIMessage = {
+      id: aiMsgId,
+      role: 'model',
+      parts: []
+    };
 
-    sendPrompt(conversationForAI, (newText) => {
+    setConversation(prev => [...prev, userMsg, aiMsg]);
+
+    // 3. Update Strict History for API with the User's Input
+    geminiHistory.current.push({ role: 'user', parts: [{ text: userText }] });
+
+    // 4. Start the Loop
+    // We pass the current history. sendPrompt will return the *new* history 
+    // including all the tool executions and intermediate thoughts.
+    const finalHistory = await sendPrompt(geminiHistory.current, (event: GeminiEvent) => {
       setConversation(prev => {
-        return prev.map(msg => {
-          if (msg.id === aiMsg.id) {
-            return {
-              ...msg,
-              parts: [{ text: msg.parts[0].text + newText }]
-            };
+        // Find the AI message to update
+        const newConv = [...prev];
+        const msgIndex = newConv.findIndex(m => m.id === aiMsgId);
+        if (msgIndex === -1) return prev;
+
+        const msg = { ...newConv[msgIndex] };
+        const parts = [...msg.parts];
+
+        switch (event.type) {
+          case 'text_chunk': {
+            // Append to last text part or create new one if the last part was a tool
+            const lastPart = parts[parts.length - 1];
+            if (lastPart && lastPart.type === 'text') {
+              parts[parts.length - 1] = {
+                ...lastPart,
+                content: lastPart.content + event.text
+              };
+            } else {
+              parts.push({ type: 'text', content: event.text });
+            }
+            break;
           }
-          return msg;
-        })
+          case 'tool_start': {
+            // Insert a new Tool Box
+            parts.push({
+              type: 'tool',
+              log: { command: event.command, output: null }
+            });
+            break;
+          }
+          case 'tool_end': {
+            // Find the running tool and finish it
+            // We search backwards because it is almost always the last item
+            for (let i = parts.length - 1; i >= 0; i--) {
+              const p = parts[i];
+              if (p.type === 'tool' && p.log.output === null) {
+                parts[i] = {
+                  ...p,
+                  log: { ...p.log, output: event.output }
+                };
+                break;
+              }
+            }
+            break;
+          }
+          case 'error': {
+            parts.push({ type: 'text', content: `\n❌ Error: ${event.message}` });
+            break;
+          }
+        }
+
+        msg.parts = parts;
+        newConv[msgIndex] = msg;
+        return newConv;
       });
     });
+
+    // 5. MEMORY SYNC: Update the persistent memory with what actually happened
+    if (finalHistory) {
+      geminiHistory.current = finalHistory;
+    }
   }
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" padding={1}>
       {/* --- HEADER --- */}
-      <Box borderStyle="round" borderColor="green" paddingX={1}>
-        <Text bold color="green">COME ALIVE</Text>
+      <Box borderStyle="round" borderColor="green" paddingX={1} marginBottom={1}>
+        <Text bold color="green">COME ALIVE: THE WARDEN</Text>
         {isStreaming && <Text color="yellow"> (Thinking...)</Text>}
       </Box>
 
-      {/* --- CHAT HISTORY --- */}
-      <Box flexDirection="column" flexGrow={1} paddingY={1}>
+      {/* --- CHAT STREAM --- */}
+      <Box flexDirection="column" marginBottom={1}>
         {conversation.map((msg) => (
-          <Box key={msg.id} flexDirection="row" marginBottom={1}>
+          <Box key={msg.id} flexDirection="column" marginBottom={1}>
+            {/* Message Header */}
             <Text bold color={msg.role === 'user' ? 'blue' : 'magenta'}>
-              {msg.role === 'user' ? 'You: ' : 'AI:  '}
+              {msg.role === 'user' ? 'You' : 'AI'}:
             </Text>
-            {/* We preserve newlines so code blocks render correctly */}
-            <Text>{msg.parts[0].text}</Text>
+
+            {/* Message Content Parts */}
+            <Box flexDirection="column" paddingLeft={2}>
+              {msg.parts.map((part, index) => {
+                if (part.type === 'text') {
+                  // Render standard text
+                  return <Text key={index}>{part.content}</Text>;
+                }
+
+                if (part.type === 'tool') {
+                  // --- RENDER VISIBLE LOG BOX ---
+                  return (
+                    <Box key={index} flexDirection="column" borderStyle="single" borderColor="yellow" marginY={1}>
+                      <Box>
+                        <Text color="yellow">Executing: </Text>
+                        <Text bold>{part.log.command}</Text>
+                      </Box>
+                      <Box borderStyle="single" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} borderColor="gray">
+                        {part.log.output === null ? (
+                          <Text italic dimColor>Running...</Text>
+                        ) : (
+                          <Text dimColor>{part.log.output.trim() || "(No output)"}</Text>
+                        )}
+                      </Box>
+                    </Box>
+                  )
+                }
+                return null;
+              })}
+            </Box>
           </Box>
         ))}
       </Box>
 
-      {/* --- INPUT FOOTER --- */}
-      <Box borderStyle="single" borderColor={isStreaming ? 'yellow' : 'gray'}>
+      {/* --- INPUT --- */}
+      <Box borderStyle="classic" borderColor={isStreaming ? 'yellow' : 'gray'}>
         <Text color="green">❯ </Text>
         {isStreaming ? (
           <Text dimColor>Wait for AI to finish...</Text>
@@ -97,7 +193,7 @@ const App = () => {
             value={input}
             onChange={setInput}
             onSubmit={handleSubmit}
-            placeholder="Type 'List files' to test the hands..."
+            placeholder="Type 'Create a file named hello.ts'..."
           />
         )}
       </Box>
